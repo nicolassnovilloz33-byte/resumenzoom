@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resumen Zoom - Todas las salas</title>
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --surface: #18181c;
+      --border: #2a2a30;
+      --text: #e4e4e7;
+      --muted: #71717a;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 720px; margin: 0 auto; }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    section h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 0.75rem 0;
+      color: var(--text);
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--border); color: var(--text); }
+    .inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .mb { margin-bottom: 1rem; }
+    .salas-list { margin-top: 0.75rem; }
+    .sala-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    .sala-item h3 { font-size: 0.9rem; margin: 0 0 0.5rem 0; }
+    .sala-item textarea { min-height: 80px; margin-top: 0.5rem; }
+    .resumen-output {
+      white-space: pre-wrap;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    .msg { font-size: 0.85rem; margin-top: 0.5rem; }
+    .msg.error { color: var(--error); }
+    .msg.success { color: var(--success); }
+    .msg.info { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Resumen Zoom – Todas las salas</h1>
+    <p class="subtitle">Transcripción de la sala principal + salas de trabajo → un solo resumen al terminar la reunión.</p>
+
+    <section>
+      <h2>1. Transcripción de la sala principal</h2>
+      <p class="msg info">Opcional: si tenés grabación en la nube, podés pegar el ID de la reunión y traer la transcripción. Si no, pegá acá el texto de la sala principal.</p>
+      <div class="inline mb">
+        <input type="text" id="meetingId" placeholder="ID de reunión Zoom (ej. 12345678901)" />
+        <button type="button" id="btnFetchZoom">Obtener transcripción</button>
+      </div>
+      <textarea id="salaPrincipal" placeholder="O pegar aquí la transcripción de la sala principal..."></textarea>
+      <p id="zoomMsg" class="msg"></p>
+    </section>
+
+    <section>
+      <h2>2. Salas de trabajo (breakout rooms)</h2>
+      <p class="msg info">Zoom no graba cada sala por separado en la nube. Añadí una entrada por sala con el texto o transcripción que tengas (ej. notas, grabación local transcrita).</p>
+      <div class="inline mb">
+        <input type="text" id="nombreSalaNueva" placeholder="Nombre de la sala (ej. Sala 1)" />
+        <button type="button" id="btnAddSala" class="btn-ghost">+ Añadir sala</button>
+      </div>
+      <div id="salasList" class="salas-list"></div>
+    </section>
+
+    <section>
+      <h2>3. Generar resumen</h2>
+      <button type="button" id="btnResumen">Generar resumen de todas las salas</button>
+      <p id="resumenMsg" class="msg"></p>
+      <div id="resumenOutput" class="resumen-output" style="display:none;"></div>
+    </section>
+  </div>
+
+  <script>
+    const API = ''; // mismo origen si servís estático desde FastAPI
+
+    function $ (id) { return document.getElementById(id); }
+    function msg (id, text, type) {
+      const el = $(id);
+      el.textContent = text;
+      el.className = 'msg ' + (type || 'info');
+    }
+
+    async function fetchTranscript () {
+      const meetingId = $('meetingId').value.trim();
+      if (!meetingId) {
+        msg('zoomMsg', 'Escribí el ID de la reunión.', 'error');
+        return;
+      }
+      msg('zoomMsg', 'Buscando transcripción...');
+      try {
+        const r = await fetch(API + '/zoom/reuniones/' + encodeURIComponent(meetingId) + '/transcript');
+        const data = await r.json();
+        if (data.transcript) {
+          $('salaPrincipal').value = data.transcript;
+          msg('zoomMsg', 'Transcripción cargada.', 'success');
+        } else {
+          msg('zoomMsg', data.message || 'No se encontró transcripción para esta reunión.', 'error');
+        }
+      } catch (e) {
+        msg('zoomMsg', 'Error: ' + e.message, 'error');
+      }
+    }
+
+    function addSala () {
+      const name = $('nombreSalaNueva').value.trim() || 'Sala ' + (document.querySelectorAll('.sala-item').length + 1);
+      const list = $('salasList');
+      const div = document.createElement('div');
+      div.className = 'sala-item';
+      div.innerHTML = `
+        <h3>${escapeHtml(name)}</h3>
+        <textarea placeholder="Transcripción o notas de esta sala..."></textarea>
+        <button type="button" class="btn-ghost" style="margin-top:0.5rem">Quitar</button>
+      `;
+      div.querySelector('button').onclick = () => div.remove();
+      list.appendChild(div);
+      $('nombreSalaNueva').value = '';
+    }
+    function escapeHtml (s) {
+      const p = document.createElement('p');
+      p.textContent = s;
+      return p.innerHTML;
+    }
+
+    async function generarResumen () {
+      const salaPrincipal = $('salaPrincipal').value.trim() || null;
+      const salas = [];
+      document.querySelectorAll('.sala-item').forEach(el => {
+        const name = el.querySelector('h3').textContent;
+        const trans = el.querySelector('textarea').value.trim();
+        if (name && trans) salas.push({ nombre: name, transcripcion: trans });
+      });
+
+      if (!salaPrincipal && salas.length === 0) {
+        msg('resumenMsg', 'Añadí al menos la transcripción de la sala principal o de una sala.', 'error');
+        return;
+      }
+
+      msg('resumenMsg', 'Generando resumen...');
+      $('resumenOutput').style.display = 'none';
+      try {
+        const r = await fetch(API + '/resumen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sala_principal: salaPrincipal,
+            salas_breakout: salas,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          msg('resumenMsg', data.detail || 'Error al generar resumen', 'error');
+          return;
+        }
+        $('resumenOutput').textContent = data.resumen;
+        $('resumenOutput').style.display = 'block';
+        msg('resumenMsg', 'Listo.', 'success');
+      } catch (e) {
+        msg('resumenMsg', 'Error: ' + e.message, 'error');
+      }
+    }
+
+    $('btnFetchZoom').onclick = fetchTranscript;
+    $('btnAddSala').onclick = addSala;
+    $('btnResumen').onclick = generarResumen;
+  </script>
+</body>
+</html>
