@@ -25,3 +25,5 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 RECALL_API_KEY = (os.getenv("RECALL_API_KEY") or "").strip()
 RECALL_REGION = (os.getenv("RECALL_REGION") or "us-west-2").strip()
 RECALL_WEBHOOK_SECRET = (os.getenv("RECALL_WEBHOOK_SECRET") or "").strip()
+# URL pública de la app (Railway o ngrok) para webhooks de transcripción en tiempo real
+BASE_PUBLIC_URL = (os.getenv("BASE_PUBLIC_URL") or "").strip()

@@ -214,7 +214,7 @@
 
     <section>
       <h2>Ver resumen (sala principal + breakouts)</h2>
-      <p class="msg info">Elegí el <strong>ID de tu reunión Zoom</strong> y hacé clic en <strong>Ver resumen</strong>. Se muestra el resumen automático de la sala principal y de todas las salas de trabajo (sin cargar nada a mano).</p>
+      <p class="msg info">Elegí el <strong>ID de tu reunión Zoom</strong> y hacé clic en <strong>Ver resumen</strong>. Se muestra el resumen automático de la sala principal y de todas las salas de trabajo (sin cargar nada a mano). Si configuraste transcripción en tiempo real (BASE_PUBLIC_URL), podés ver un <strong>resumen parcial</strong> sin terminar la reunión.</p>
       <div class="inline mb">
         <div class="url-combo" id="idComboResumen" style="flex:1; min-width:200px;">
           <input type="text" id="meetingIdResumen" placeholder="ID de reunión (ej. 12345678901)" autocomplete="off" />
@@ -228,6 +228,7 @@
       </div>
       <div class="inline mb">
         <button type="button" id="btnVerResumen">Ver resumen</button>
+        <button type="button" id="btnVerResumenParcial" class="btn-ghost" style="margin-left:0.5rem;">Ver resumen parcial (en vivo)</button>
       </div>
       <p id="verResumenMsg" class="msg"></p>
       <div id="verResumenEstado" class="resumen-output" style="display:none; margin-top:0.5rem;"></div>
@@ -506,6 +507,44 @@
       }
     }
     $('btnVerResumen').onclick = verResumen;
+
+    async function verResumenParcial () {
+      var meetingIdInput = $('meetingIdResumen');
+      var mid = meetingIdInput.value.trim().replace(/\D/g, '');
+      if (!mid) {
+        msg('verResumenMsg', 'Escribí el ID de tu reunión Zoom (solo números).', 'error');
+        return;
+      }
+      msg('verResumenMsg', 'Generando resumen parcial...');
+      $('verResumenEstado').style.display = 'none';
+      $('verResumenSummary').style.display = 'none';
+      try {
+        var r = await fetch(API + '/reuniones/resumen-parcial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+          body: JSON.stringify({ meeting_id: mid })
+        });
+        var text = await r.text();
+        var data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          msg('verResumenMsg', 'El servidor no respondió con datos válidos.', 'error');
+          return;
+        }
+        if (!r.ok) {
+          msg('verResumenMsg', data.detail || 'Aún no hay transcripción en vivo. Esperá unos minutos.', 'error');
+          return;
+        }
+        msg('verResumenMsg', 'Resumen parcial (en vivo):');
+        $('verResumenSummary').textContent = (data.summary || '').trim() || 'Sin contenido aún.';
+        $('verResumenSummary').style.display = 'block';
+      } catch (e) {
+        msg('verResumenMsg', 'Error: ' + e.message, 'error');
+      }
+    }
+    $('btnVerResumenParcial').onclick = verResumenParcial;
+
     // Cargar ID y URLs guardadas al abrir la página
     try {
       var savedIds = getSavedIds();

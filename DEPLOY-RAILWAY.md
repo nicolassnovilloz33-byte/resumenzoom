@@ -69,10 +69,11 @@ Así la app corre 24/7 en la nube y no necesitás tener la compu prendida. Cuand
    |-------------------|------------------------------------|
    | `RECALL_API_KEY`  | tu clave de Recall.ai              |
    | `RECALL_REGION`   | `us-west-2`                        |
-   | `OPENAI_API_KEY`  | tu clave de OpenAI                 |
-   | `ZOOM_ACCOUNT_ID` | (opcional, si usás Zoom)           |
-   | `ZOOM_CLIENT_ID`  | (opcional)                         |
-   | `ZOOM_CLIENT_SECRET` | (opcional)                      |
+| `OPENAI_API_KEY`  | tu clave de OpenAI                 |
+| `ZOOM_ACCOUNT_ID` | (opcional, si usás Zoom)           |
+| `ZOOM_CLIENT_ID`  | (opcional)                         |
+| `ZOOM_CLIENT_SECRET` | (opcional)                      |
+| **`BASE_PUBLIC_URL`** | **URL pública de tu app** (ej. `https://web-production-xxxx.up.railway.app`) para **transcripción en tiempo real**. Si la dejás vacía, la app funciona igual pero no podrás usar "Ver resumen parcial" durante la reunión. |
 
    No subas `z.env` a GitHub; copiá solo los valores y pegálos en Railway.
 

@@ -32,6 +32,7 @@ from sessions import (
     set_room_transcript,
     mark_processing,
     mark_done,
+    append_realtime_transcript,
 )
 from zoom_client import (
     get_meeting_recordings,
@@ -64,6 +65,10 @@ class IniciarReunionBody(BaseModel):
         None,
         description="Cantidad de salas de trabajo. Si lo indicás, se crean N bots que VOS asignás a cada sala en Zoom (asignación manual). Así nadie elige sala y no hay riesgo de que un ISP entre a la sala de otro.",
     )
+
+
+class ResumenParcialBody(BaseModel):
+    meeting_id: str = Field(..., description="ID de la reunión Zoom (solo números)")
 
 
 # --- App ---
@@ -200,6 +205,42 @@ def reuniones_por_meeting_id(meeting_id: str):
     return _session_response(session)
 
 
+@app.post("/reuniones/resumen-parcial")
+def resumen_parcial(body: ResumenParcialBody):
+    """
+    Genera un resumen con la transcripción en tiempo real acumulada hasta ahora
+    (sin necesidad de que la reunión haya terminado). Requiere BASE_PUBLIC_URL configurada
+    y que los bots estén creados con transcripción en vivo.
+    """
+    import re
+    mid = re.sub(r"\D", "", str(body.meeting_id or ""))
+    if not mid:
+        raise HTTPException(status_code=400, detail="ID de reunión inválido.")
+    session = get_latest_session_by_meeting_id(mid)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="No hay sesión para este ID. Iniciá una reunión con bots primero.",
+        )
+    sala_principal = session.main_realtime_transcript or session.main_transcript or ""
+    salas = []
+    for r in session.room_bots:
+        trans = r.realtime_transcript or r.transcript or ""
+        name = r.room_name or f"Sala {r.room_id[:8]}"
+        if trans or name:
+            salas.append({"nombre": name, "transcripcion": trans})
+    if not sala_principal.strip() and not any((s.get("transcripcion") or "").strip() for s in salas):
+        raise HTTPException(
+            status_code=404,
+            detail="Aún no hay transcripción en tiempo real. Esperá unos minutos mientras hablan en la reunión.",
+        )
+    try:
+        resumen = generar_resumen(sala_principal=sala_principal or None, salas_breakout=salas)
+        return {"summary": resumen}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error al generar resumen: {str(e)}")
+
+
 def _session_response(session):
     return {
         "session_id": session.session_id,
@@ -208,6 +249,10 @@ def _session_response(session):
         "status": session.status,
         "main_bot_id": session.main_bot_id,
         "main_transcript_ready": session.main_transcript is not None,
+        "realtime_available": bool(
+            session.main_realtime_transcript
+            or any(getattr(r, "realtime_transcript", "") for r in session.room_bots)
+        ),
         "room_bots": [
             {"bot_id": r.bot_id, "room_name": r.room_name, "transcript_ready": r.transcript is not None}
             for r in session.room_bots
@@ -300,6 +345,35 @@ async def webhook_recall(request: Request):
             _on_all_bots_done(session.session_id)
         return {"ok": True}
 
+    return {"ok": True}
+
+
+@app.post("/webhooks/recall/realtime")
+async def webhook_recall_realtime(request: Request):
+    """
+    Webhook de Recall para transcripción en tiempo real (transcript.data / transcript.partial_data).
+    Acumulamos solo transcript.data para el resumen parcial (evitar duplicados con partial).
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False}
+    event = body.get("event") or ""
+    if event not in ("transcript.data", "transcript.partial_data"):
+        return {"ok": True}
+    data = body.get("data") or {}
+    inner = data.get("data") or {}
+    words = inner.get("words") or []
+    text = " ".join((w.get("text") or "").strip() for w in words).strip()
+    if not text:
+        return {"ok": True}
+    bot = data.get("bot") or {}
+    bot_id = bot.get("id") if isinstance(bot, dict) else None
+    if not bot_id:
+        return {"ok": True}
+    # Solo acumulamos los finales (transcript.data) para el resumen parcial
+    if event == "transcript.data":
+        append_realtime_transcript(bot_id, text)
     return {"ok": True}
 
 

@@ -1,9 +1,10 @@
 """
 Cliente Recall.ai: crear bots que graban la sala principal y cada breakout room,
 y obtener la transcripción de cada uno cuando terminan.
+Soporta transcripción en tiempo real si BASE_PUBLIC_URL está configurada.
 """
 import httpx
-from config import RECALL_API_KEY, RECALL_REGION
+from config import RECALL_API_KEY, RECALL_REGION, BASE_PUBLIC_URL
 
 RECALL_BASE = f"https://{RECALL_REGION}.recall.ai/api/v1"
 
@@ -12,6 +13,23 @@ def _headers():
     if not RECALL_API_KEY:
         raise ValueError("Falta RECALL_API_KEY en z.env")
     return {"Authorization": f"Token {RECALL_API_KEY}", "Content-Type": "application/json"}
+
+
+def _recording_config() -> dict:
+    """Config de grabación: con tiempo real si BASE_PUBLIC_URL está definida."""
+    base = (BASE_PUBLIC_URL or "").strip().rstrip("/")
+    if base:
+        return {
+            "transcript": {"provider": {"recallai_streaming": {}}},
+            "realtime_endpoints": [
+                {
+                    "type": "webhook",
+                    "url": f"{base}/webhooks/recall/realtime",
+                    "events": ["transcript.data", "transcript.partial_data"],
+                }
+            ],
+        }
+    return {"transcript": {"provider": {"meeting_captions": {}}}}
 
 
 def create_bot_main_room(meeting_url: str, metadata: dict | None = None) -> dict:
@@ -23,9 +41,7 @@ def create_bot_main_room(meeting_url: str, metadata: dict | None = None) -> dict
         "meeting_url": meeting_url,
         "bot_name": "ResumenZoom-SalaPrincipal",
         "breakout_room": {"mode": "join_main_room"},
-        "recording_config": {
-            "transcript": {"provider": {"meeting_captions": {}}},
-        },
+        "recording_config": _recording_config(),
     }
     if metadata:
         body["metadata"] = metadata
@@ -46,9 +62,7 @@ def create_bot_breakout_room(
         "meeting_url": meeting_url,
         "bot_name": f"ResumenZoom-{room_name or room_id[:8]}",
         "breakout_room": {"mode": "join_specific_room", "room_id": room_id},
-        "recording_config": {
-            "transcript": {"provider": {"meeting_captions": {}}},
-        },
+        "recording_config": _recording_config(),
     }
     if metadata:
         body["metadata"] = metadata
@@ -70,9 +84,7 @@ def create_bot_auto_accept(
         "meeting_url": meeting_url,
         "bot_name": bot_name,
         "breakout_room": {"mode": "auto_accept_all_invites"},
-        "recording_config": {
-            "transcript": {"provider": {"meeting_captions": {}}},
-        },
+        "recording_config": _recording_config(),
     }
     if metadata:
         body["metadata"] = metadata

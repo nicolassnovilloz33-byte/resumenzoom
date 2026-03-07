@@ -33,6 +33,7 @@ class RoomBot:
     room_id: str
     room_name: str
     transcript: str | None = None  # None = aún no procesado, "" = error o vacío
+    realtime_transcript: str = ""  # Acumulado en tiempo real (transcript.data)
 
 
 @dataclass
@@ -42,6 +43,7 @@ class Session:
     meeting_id: str | None  # ID numérico de Zoom para buscar por reunión
     main_bot_id: str
     main_transcript: str | None = None
+    main_realtime_transcript: str = ""  # Acumulado en tiempo real
     room_bots: list[RoomBot] = field(default_factory=list)
     status: str = "recording"  # recording | processing | done
     summary: str | None = None
@@ -118,6 +120,23 @@ def set_room_transcript(session_id: str, bot_id: str, text: str | None) -> None:
         if r.bot_id == bot_id:
             r.transcript = text if text else ""
             break
+
+
+def append_realtime_transcript(bot_id: str, text: str) -> None:
+    """Acumula texto de transcripción en tiempo real (evento transcript.data)."""
+    if not text or not text.strip():
+        return
+    s = get_session_by_bot_id(bot_id)
+    if not s:
+        return
+    segment = text.strip()
+    if s.main_bot_id == bot_id:
+        s.main_realtime_transcript = (s.main_realtime_transcript + " " + segment).strip()
+    else:
+        for r in s.room_bots:
+            if r.bot_id == bot_id:
+                r.realtime_transcript = (r.realtime_transcript + " " + segment).strip()
+                break
 
 
 def mark_processing(session_id: str) -> None:
