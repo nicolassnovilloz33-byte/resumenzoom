@@ -18,12 +18,14 @@ from resumen import generar_resumen
 from recall_client import (
     create_bot_main_room,
     create_bot_breakout_room,
+    create_bot_auto_accept,
     get_bot,
     get_transcript_text,
 )
 from sessions import (
     create_session,
     get_session,
+    get_latest_session_by_meeting_id,
     get_session_by_bot_id,
     register_room_bot,
     set_main_transcript,
@@ -58,6 +60,10 @@ class PedidoResumen(BaseModel):
 
 class IniciarReunionBody(BaseModel):
     meeting_url: str = Field(..., description="URL de la reunión Zoom (ej. https://zoom.us/j/123...)")
+    num_breakout_rooms: int | None = Field(
+        None,
+        description="Cantidad de salas de trabajo. Si lo indicás, se crean N bots que VOS asignás a cada sala en Zoom (asignación manual). Así nadie elige sala y no hay riesgo de que un ISP entre a la sala de otro.",
+    )
 
 
 # --- App ---
@@ -106,18 +112,57 @@ def root():
 @app.post("/reuniones/iniciar")
 def reuniones_iniciar(body: IniciarReunionBody):
     """
-    Inicia una reunión automática: envía un bot a la sala principal.
-    Cuando en Zoom abras las salas de trabajo con "Dejar que los participantes elijan sala",
-    este servidor recibirá webhooks y creará un bot por cada sala. Al terminar todos,
-    se generará el resumen sin intervención manual.
+    Inicia una reunión automática.
+    - Sin num_breakout_rooms: envía un bot a la sala principal; si en Zoom usás
+      "Dejar que los participantes elijan sala", se crean bots por sala vía webhook.
+    - Con num_breakout_rooms (ej. 4): envía 1 bot a la sala principal + 4 bots que
+      aceptan asignación. Vos, como host, asignás cada bot a una sala al abrir los
+      breakouts. Así nadie elige sala (ideal para confidencialidad entre ISPs).
     """
     try:
-        bot = create_bot_main_room(body.meeting_url)
+        meeting_url = (body.meeting_url or "").strip()
+        if not meeting_url:
+            raise HTTPException(status_code=400, detail="La URL de la reunión no puede estar vacía.")
+        bot = create_bot_main_room(meeting_url)
         bot_id = bot.get("id")
-        meeting_url = bot.get("meeting_url") or body.meeting_url
+        meeting_url_from_bot = bot.get("meeting_url") or meeting_url
+        if isinstance(meeting_url_from_bot, dict):
+            meeting_url_from_bot = meeting_url_from_bot.get("url") or meeting_url_from_bot.get("meeting_url") or meeting_url
+        if not isinstance(meeting_url_from_bot, str):
+            meeting_url_from_bot = meeting_url
         if not bot_id:
             raise HTTPException(status_code=502, detail="Recall no devolvió ID del bot")
-        session = create_session(meeting_url, bot_id)
+        session = create_session(meeting_url_from_bot, bot_id)
+
+        room_bot_ids = []
+        if body.num_breakout_rooms and body.num_breakout_rooms > 0:
+            n = min(body.num_breakout_rooms, 20)  # límite razonable
+            for i in range(1, n + 1):
+                try:
+                    rb = create_bot_auto_accept(
+                        meeting_url_from_bot,
+                        bot_name=f"ResumenZoom-Sala{i}",
+                    )
+                    rid = rb.get("id")
+                    if rid:
+                        register_room_bot(
+                            session.session_id, rid, room_id="", room_name=f"Sala {i}"
+                        )
+                        room_bot_ids.append((i, rid))
+                except Exception:
+                    break
+
+            return {
+                "session_id": session.session_id,
+                "main_bot_id": bot_id,
+                "room_bots": [{"sala": f"Sala {i}", "bot_id": rid} for i, rid in room_bot_ids],
+                "message": (
+                    f"Listo: 1 bot en sala principal + {len(room_bot_ids)} bots para salas de trabajo. "
+                    "Al abrir los breakouts en Zoom, ASIGNÁ cada participante 'ResumenZoom-Sala1', "
+                    "'ResumenZoom-Sala2', etc. a la sala que corresponda. Nadie elige sala; solo vos asignás."
+                ),
+            }
+
         return {
             "session_id": session.session_id,
             "main_bot_id": bot_id,
@@ -125,8 +170,10 @@ def reuniones_iniciar(body: IniciarReunionBody):
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=f"Error al enviar bot: {str(e)}")
 
 
 @app.get("/reuniones/{session_id}")
@@ -135,9 +182,29 @@ def reuniones_estado(session_id: str):
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    return _session_response(session)
+
+
+@app.get("/reuniones")
+def reuniones_por_meeting_id(meeting_id: str):
+    """
+    Devuelve la sesión más reciente para este ID de reunión Zoom.
+    Así podés usar siempre tu mismo meeting ID y solo hacer clic en "Ver resumen".
+    """
+    session = get_latest_session_by_meeting_id(meeting_id)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="No hay ninguna sesión para este ID de reunión. Iniciá una reunión con bots primero.",
+        )
+    return _session_response(session)
+
+
+def _session_response(session):
     return {
         "session_id": session.session_id,
         "meeting_url": session.meeting_url,
+        "meeting_id": session.meeting_id,
         "status": session.status,
         "main_bot_id": session.main_bot_id,
         "main_transcript_ready": session.main_transcript is not None,
@@ -178,6 +245,11 @@ async def webhook_recall(request: Request):
         body = await request.json()
     except Exception:
         return {"ok": False}
+    # Algunos proveedores (Svix) pueden enviar el payload envuelto en "data"
+    if isinstance(body, dict) and "data" in body and "event" not in body:
+        body = body.get("data") or body
+    if isinstance(body, dict) and isinstance(body.get("data"), dict) and "event" in body.get("data", {}):
+        body = body["data"]
     event = body.get("event") or ""
     data = body.get("data") or {}
 
@@ -193,8 +265,11 @@ async def webhook_recall(request: Request):
         session = get_session_by_bot_id(bot_id)
         if not session:
             return {"ok": True}
+        meeting_url = (session.meeting_url or "").strip()
+        if not meeting_url:
+            return {"ok": True}
         try:
-            new_bot = create_bot_breakout_room(session.meeting_url, room_id, room_name)
+            new_bot = create_bot_breakout_room(meeting_url, room_id, room_name)
             new_id = new_bot.get("id")
             if new_id:
                 register_room_bot(session.session_id, new_id, room_id, room_name)

@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resumen Zoom - Todas las salas</title>
+  <title>ResumenZoom</title>
+  <meta name="application-name" content="ResumenZoom" />
   <style>
     :root {
       --bg: #0f0f12;
@@ -107,44 +108,136 @@
     .msg.error { color: var(--error); }
     .msg.success { color: var(--success); }
     .msg.info { color: var(--muted); }
+
+    .url-combo {
+      display: flex;
+      align-items: stretch;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      position: relative;
+    }
+    .url-combo input {
+      flex: 1;
+      border: none;
+      border-radius: 8px 0 0 8px;
+      min-width: 0;
+    }
+    .url-combo .url-dropdown-btn {
+      width: 36px;
+      padding: 0;
+      background: var(--surface);
+      border: none;
+      border-left: 1px solid var(--border);
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .url-combo .url-dropdown-btn:hover { color: var(--text); background: var(--border); }
+    .url-combo .url-dropdown-btn svg { width: 16px; height: 16px; }
+    .url-dropdown-list {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 2px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 10;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .url-dropdown-list.open { display: block; }
+    .url-dropdown-list .url-item {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .url-dropdown-list .url-item:hover { background: var(--border); }
+    .url-dropdown-list .url-item:last-of-type { border-bottom: none; }
+    .url-dropdown-list .url-item.borrar-historial {
+      color: var(--accent);
+      font-weight: 500;
+      border-top: 1px solid var(--border);
+    }
+    .url-dropdown-list .url-item.empty { color: var(--muted); cursor: default; }
+    .url-dropdown-list .url-item.empty:hover { background: transparent; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Resumen Zoom – Todas las salas</h1>
-    <p class="subtitle">Transcripción de la sala principal + salas de trabajo → un solo resumen al terminar la reunión.</p>
+    <h1>ResumenZoom</h1>
+    <p class="subtitle">Resumen de la sala principal + salas de trabajo al terminar la reunión.</p>
 
     <section>
-      <h2>1. Transcripción de la sala principal</h2>
-      <p class="msg info">Opcional: si tenés grabación en la nube, podés pegar el ID de la reunión y traer la transcripción. Si no, pegá acá el texto de la sala principal.</p>
-      <div class="inline mb">
-        <input type="text" id="meetingId" placeholder="ID de reunión Zoom (ej. 12345678901)" />
-        <button type="button" id="btnFetchZoom">Obtener transcripción</button>
+      <h2>Iniciar reunión con bots (paso 3)</h2>
+      <p class="msg info">Pegá la <strong>URL de la reunión</strong> y, si querés que <strong>vos elijas quién va a cada sala</strong> (sin que los participantes elijan), indicá <strong>cuántas salas</strong> vas a crear. Se enviará un bot a la sala principal + un bot por cada sala; después en Zoom vos asignás cada bot y cada persona a la sala que corresponda.</p>
+      <div class="mb">
+        <label style="display:block; margin-bottom:0.35rem; color:var(--muted); font-size:0.9rem;">URL de la reunión</label>
+        <div class="inline" style="flex-wrap:wrap;">
+          <div class="url-combo" id="urlComboIniciar" style="flex:1; min-width:200px;">
+            <input type="text" id="meetingUrlIniciar" placeholder="https://zoom.us/j/12345678901?pwd=..." autocomplete="off" />
+            <button type="button" class="url-dropdown-btn" id="urlDropdownBtn" title="Ver reuniones guardadas" aria-label="Ver reuniones guardadas">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="url-dropdown-list" id="urlDropdownList" role="listbox"></div>
+          </div>
+          <label class="inline" style="margin:0; color:var(--muted); font-size:0.85rem; margin-left:0.5rem;"><input type="checkbox" id="recordarUrl" checked /> Recordar URL</label>
+          <button type="button" id="btnBorrarUrl" class="btn-ghost" style="margin-left:0.5rem; font-size:0.85rem;">Borrar historial</button>
+        </div>
       </div>
-      <textarea id="salaPrincipal" placeholder="O pegar aquí la transcripción de la sala principal..."></textarea>
-      <p id="zoomMsg" class="msg"></p>
+      <div class="mb">
+        <label style="display:block; margin-bottom:0.35rem; color:var(--muted); font-size:0.9rem;">Número de salas de trabajo (opcional)</label>
+        <input type="number" id="numSalasIniciar" placeholder="Ej. 4" min="1" max="20" style="width:6rem; padding:0.5rem;" />
+        <span style="color:var(--muted); font-size:0.85rem; margin-left:0.5rem;">Si lo completás, se crean esos bots y en Zoom <strong>vos asignás</strong> cada uno a su sala. No uses "Dejar que elijan sala".</span>
+      </div>
+      <button type="button" id="btnIniciarReunion">Enviar bots a la reunión</button>
+      <p id="iniciarMsg" class="msg"></p>
+      <div id="iniciarResult" class="resumen-output" style="display:none; margin-top:0.5rem; font-size:0.85rem;"></div>
     </section>
 
     <section>
-      <h2>2. Salas de trabajo (breakout rooms)</h2>
-      <p class="msg info">Zoom no graba cada sala por separado en la nube. Añadí una entrada por sala con el texto o transcripción que tengas (ej. notas, grabación local transcrita).</p>
+      <h2>Ver resumen (sala principal + breakouts)</h2>
+      <p class="msg info">Elegí el <strong>ID de tu reunión Zoom</strong> y hacé clic en <strong>Ver resumen</strong>. Se muestra el resumen automático de la sala principal y de todas las salas de trabajo (sin cargar nada a mano).</p>
       <div class="inline mb">
-        <input type="text" id="nombreSalaNueva" placeholder="Nombre de la sala (ej. Sala 1)" />
-        <button type="button" id="btnAddSala" class="btn-ghost">+ Añadir sala</button>
+        <div class="url-combo" id="idComboResumen" style="flex:1; min-width:200px;">
+          <input type="text" id="meetingIdResumen" placeholder="ID de reunión (ej. 12345678901)" autocomplete="off" />
+          <button type="button" class="url-dropdown-btn" id="idDropdownBtn" title="Ver IDs guardados" aria-label="Ver IDs guardados">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="url-dropdown-list" id="idDropdownList" role="listbox"></div>
+        </div>
+        <label class="inline" style="margin:0; color:var(--muted); font-size:0.85rem; margin-left:0.5rem;"><input type="checkbox" id="recordarMeetingId" checked /> Recordar ID</label>
+        <button type="button" id="btnBorrarId" class="btn-ghost" style="margin-left:0.5rem; font-size:0.85rem;">Borrar historial</button>
       </div>
-      <div id="salasList" class="salas-list"></div>
-    </section>
-
-    <section>
-      <h2>3. Generar resumen</h2>
-      <button type="button" id="btnResumen">Generar resumen de todas las salas</button>
-      <p id="resumenMsg" class="msg"></p>
-      <div id="resumenOutput" class="resumen-output" style="display:none;"></div>
+      <div class="inline mb">
+        <button type="button" id="btnVerResumen">Ver resumen</button>
+      </div>
+      <p id="verResumenMsg" class="msg"></p>
+      <div id="verResumenEstado" class="resumen-output" style="display:none; margin-top:0.5rem;"></div>
+      <div id="verResumenSummary" class="resumen-output" style="display:none; margin-top:0.5rem; white-space:pre-wrap;"></div>
     </section>
   </div>
 
   <script>
     const API = ''; // mismo origen si servís estático desde FastAPI
+    var fetchOpts = { headers: { 'ngrok-skip-browser-warning': '1' } };
 
     function $ (id) { return document.getElementById(id); }
     function msg (id, text, type) {
@@ -153,88 +246,281 @@
       el.className = 'msg ' + (type || 'info');
     }
 
-    async function fetchTranscript () {
-      const meetingId = $('meetingId').value.trim();
-      if (!meetingId) {
-        msg('zoomMsg', 'Escribí el ID de la reunión.', 'error');
+    async function iniciarReunion () {
+      var url = $('meetingUrlIniciar').value.trim();
+      if (!url) {
+        msg('iniciarMsg', 'Pegá la URL de la reunión Zoom.', 'error');
         return;
       }
-      msg('zoomMsg', 'Buscando transcripción...');
-      try {
-        const r = await fetch(API + '/zoom/reuniones/' + encodeURIComponent(meetingId) + '/transcript');
-        const data = await r.json();
-        if (data.transcript) {
-          $('salaPrincipal').value = data.transcript;
-          msg('zoomMsg', 'Transcripción cargada.', 'success');
-        } else {
-          msg('zoomMsg', data.message || 'No se encontró transcripción para esta reunión.', 'error');
-        }
-      } catch (e) {
-        msg('zoomMsg', 'Error: ' + e.message, 'error');
+      if ($('recordarUrl').checked) {
+        try { addUrlToHistory(url); } catch (e) {}
       }
-    }
-
-    function addSala () {
-      const name = $('nombreSalaNueva').value.trim() || 'Sala ' + (document.querySelectorAll('.sala-item').length + 1);
-      const list = $('salasList');
-      const div = document.createElement('div');
-      div.className = 'sala-item';
-      div.innerHTML = `
-        <h3>${escapeHtml(name)}</h3>
-        <textarea placeholder="Transcripción o notas de esta sala..."></textarea>
-        <button type="button" class="btn-ghost" style="margin-top:0.5rem">Quitar</button>
-      `;
-      div.querySelector('button').onclick = () => div.remove();
-      list.appendChild(div);
-      $('nombreSalaNueva').value = '';
-    }
-    function escapeHtml (s) {
-      const p = document.createElement('p');
-      p.textContent = s;
-      return p.innerHTML;
-    }
-
-    async function generarResumen () {
-      const salaPrincipal = $('salaPrincipal').value.trim() || null;
-      const salas = [];
-      document.querySelectorAll('.sala-item').forEach(el => {
-        const name = el.querySelector('h3').textContent;
-        const trans = el.querySelector('textarea').value.trim();
-        if (name && trans) salas.push({ nombre: name, transcripcion: trans });
-      });
-
-      if (!salaPrincipal && salas.length === 0) {
-        msg('resumenMsg', 'Añadí al menos la transcripción de la sala principal o de una sala.', 'error');
-        return;
-      }
-
-      msg('resumenMsg', 'Generando resumen...');
-      $('resumenOutput').style.display = 'none';
+      var numSalas = parseInt($('numSalasIniciar').value, 10);
+      var body = { meeting_url: url };
+      if (numSalas >= 1 && numSalas <= 20) body.num_breakout_rooms = numSalas;
+      msg('iniciarMsg', 'Enviando bots a la reunión...');
+      $('iniciarResult').style.display = 'none';
       try {
-        const r = await fetch(API + '/resumen', {
+        var r = await fetch(API + '/reuniones/iniciar', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sala_principal: salaPrincipal,
-            salas_breakout: salas,
-          }),
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+          body: JSON.stringify(body)
         });
-        const data = await r.json();
+        var data = await r.json();
         if (!r.ok) {
-          msg('resumenMsg', data.detail || 'Error al generar resumen', 'error');
+          var detail = data.detail;
+          if (Array.isArray(detail)) detail = detail.map(function(d){ return d.msg || d.loc ? d.loc.join('.') + ': ' + (d.msg || '') : ''; }).join('; ');
+          else if (typeof detail !== 'string') detail = JSON.stringify(detail);
+          msg('iniciarMsg', detail || 'Error al iniciar.', 'error');
           return;
         }
-        $('resumenOutput').textContent = data.resumen;
-        $('resumenOutput').style.display = 'block';
-        msg('resumenMsg', 'Listo.', 'success');
+        msg('iniciarMsg', 'Listo. Unite a Zoom y asigná cada bot y cada persona a su sala.', 'success');
+        $('iniciarResult').style.display = 'block';
+        $('iniciarResult').innerHTML = '<strong>Session ID:</strong> ' + (data.session_id || '') + '<br><br>' + (data.message || '');
       } catch (e) {
-        msg('resumenMsg', 'Error: ' + e.message, 'error');
+        msg('iniciarMsg', 'Error: ' + (e.message || 'No se pudo conectar con el servidor.'), 'error');
       }
     }
+    $('btnIniciarReunion').onclick = iniciarReunion;
 
-    $('btnFetchZoom').onclick = fetchTranscript;
-    $('btnAddSala').onclick = addSala;
-    $('btnResumen').onclick = generarResumen;
+    function getSavedUrls () {
+      try {
+        var raw = localStorage.getItem('zoom1_meeting_urls');
+        if (raw) {
+          var arr = JSON.parse(raw);
+          return Array.isArray(arr) ? arr : [];
+        }
+      } catch (e) {}
+      return [];
+    }
+    function setSavedUrls (arr) {
+      try {
+        localStorage.setItem('zoom1_meeting_urls', JSON.stringify(arr));
+      } catch (e) {}
+    }
+    function addUrlToHistory (url) {
+      url = (url || '').trim();
+      if (!url) return;
+      var arr = getSavedUrls();
+      arr = arr.filter(function(u) { return u !== url; });
+      arr.unshift(url);
+      setSavedUrls(arr.slice(0, 20));
+    }
+    var urlDropdownOpen = false;
+    function renderUrlDropdown () {
+      var list = $('urlDropdownList');
+      var urls = getSavedUrls();
+      list.innerHTML = '';
+      if (urls.length === 0) {
+        var empty = document.createElement('button');
+        empty.type = 'button';
+        empty.className = 'url-item empty';
+        empty.textContent = 'No hay reuniones guardadas';
+        empty.disabled = true;
+        list.appendChild(empty);
+      } else {
+        urls.forEach(function(u) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'url-item';
+          btn.textContent = u;
+          btn.title = u;
+          btn.onclick = function() {
+            $('meetingUrlIniciar').value = u;
+            closeUrlDropdown();
+          };
+          list.appendChild(btn);
+        });
+      }
+      var borrar = document.createElement('button');
+      borrar.type = 'button';
+      borrar.className = 'url-item borrar-historial';
+      borrar.textContent = 'Borrar historial';
+      borrar.onclick = function() { borrarUrlGuardada(); closeUrlDropdown(); };
+      list.appendChild(borrar);
+    }
+    function openUrlDropdown () {
+      urlDropdownOpen = true;
+      renderUrlDropdown();
+      $('urlDropdownList').classList.add('open');
+    }
+    function closeUrlDropdown () {
+      urlDropdownOpen = false;
+      $('urlDropdownList').classList.remove('open');
+    }
+    $('urlDropdownBtn').onclick = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (urlDropdownOpen) closeUrlDropdown(); else openUrlDropdown();
+    };
+    $('meetingUrlIniciar').onfocus = function() { openUrlDropdown(); };
+    document.addEventListener('click', function(e) {
+      if (urlDropdownOpen && !$('urlComboIniciar').contains(e.target)) closeUrlDropdown();
+    });
+
+    function borrarUrlGuardada () {
+      try {
+        localStorage.removeItem('zoom1_meeting_url');
+        localStorage.removeItem('zoom1_meeting_urls');
+        $('meetingUrlIniciar').value = '';
+        closeUrlDropdown();
+        renderUrlDropdown();
+        msg('iniciarMsg', 'Historial de URLs borrado.', 'success');
+      } catch (e) {
+        msg('iniciarMsg', 'No se pudo borrar.', 'error');
+      }
+    }
+    $('btnBorrarUrl').onclick = borrarUrlGuardada;
+
+    function getSavedIds () {
+      try {
+        var raw = localStorage.getItem('zoom1_meeting_ids');
+        if (raw) {
+          var arr = JSON.parse(raw);
+          return Array.isArray(arr) ? arr : [];
+        }
+      } catch (e) {}
+      return [];
+    }
+    function setSavedIds (arr) {
+      try {
+        localStorage.setItem('zoom1_meeting_ids', JSON.stringify(arr));
+      } catch (e) {}
+    }
+    function addIdToHistory (id) {
+      id = (id || '').trim().replace(/\D/g, '');
+      if (!id) return;
+      var arr = getSavedIds();
+      arr = arr.filter(function(i) { return i !== id; });
+      arr.unshift(id);
+      setSavedIds(arr.slice(0, 20));
+    }
+    var idDropdownOpen = false;
+    function renderIdDropdown () {
+      var list = $('idDropdownList');
+      var ids = getSavedIds();
+      list.innerHTML = '';
+      if (ids.length === 0) {
+        var empty = document.createElement('button');
+        empty.type = 'button';
+        empty.className = 'url-item empty';
+        empty.textContent = 'No hay IDs guardados';
+        empty.disabled = true;
+        list.appendChild(empty);
+      } else {
+        ids.forEach(function(id) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'url-item';
+          btn.textContent = id;
+          btn.onclick = function() {
+            $('meetingIdResumen').value = id;
+            closeIdDropdown();
+          };
+          list.appendChild(btn);
+        });
+      }
+      var borrar = document.createElement('button');
+      borrar.type = 'button';
+      borrar.className = 'url-item borrar-historial';
+      borrar.textContent = 'Borrar historial';
+      borrar.onclick = function() { borrarIdGuardado(); closeIdDropdown(); };
+      list.appendChild(borrar);
+    }
+    function openIdDropdown () {
+      idDropdownOpen = true;
+      renderIdDropdown();
+      $('idDropdownList').classList.add('open');
+    }
+    function closeIdDropdown () {
+      idDropdownOpen = false;
+      $('idDropdownList').classList.remove('open');
+    }
+    $('idDropdownBtn').onclick = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (idDropdownOpen) closeIdDropdown(); else openIdDropdown();
+    };
+    $('meetingIdResumen').onfocus = function() { openIdDropdown(); };
+    document.addEventListener('click', function(e) {
+      if (idDropdownOpen && !$('idComboResumen').contains(e.target)) closeIdDropdown();
+    });
+
+    function borrarIdGuardado () {
+      try {
+        localStorage.removeItem('zoom1_meeting_id');
+        localStorage.removeItem('zoom1_meeting_ids');
+        $('meetingIdResumen').value = '';
+        closeIdDropdown();
+        renderIdDropdown();
+        msg('verResumenMsg', 'Historial de IDs borrado.', 'success');
+      } catch (e) {
+        msg('verResumenMsg', 'No se pudo borrar.', 'error');
+      }
+    }
+    $('btnBorrarId').onclick = borrarIdGuardado;
+
+    async function verResumen () {
+      var meetingIdInput = $('meetingIdResumen');
+      var mid = meetingIdInput.value.trim().replace(/\D/g, '');
+      if (!mid) {
+        msg('verResumenMsg', 'Escribí el ID de tu reunión Zoom (solo números).', 'error');
+        return;
+      }
+      if ($('recordarMeetingId').checked) {
+        try { addIdToHistory(mid); } catch (e) {}
+      }
+      msg('verResumenMsg', 'Buscando...');
+      $('verResumenEstado').style.display = 'none';
+      $('verResumenSummary').style.display = 'none';
+      try {
+        var r = await fetch(API + '/reuniones?meeting_id=' + encodeURIComponent(mid), fetchOpts);
+        var text = await r.text();
+        var data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          msg('verResumenMsg', 'El servidor no respondió con datos válidos. ¿La app (uvicorn) está corriendo? Si entrás por ngrok, abrí la URL de ngrok en una pestaña y hacé clic en "Visitar sitio", luego probá de nuevo.', 'error');
+          return;
+        }
+        if (!r.ok) {
+          msg('verResumenMsg', data.detail || 'No se encontró ninguna sesión para esta reunión. Iniciá una reunión con bots primero.', 'error');
+          return;
+        }
+        msg('verResumenMsg', '');
+        $('verResumenEstado').style.display = 'block';
+        $('verResumenEstado').innerHTML = 'Estado: <strong>' + data.status + '</strong>' +
+          (data.main_transcript_ready !== undefined ? ' · Sala principal: ' + (data.main_transcript_ready ? 'lista' : 'pendiente') : '') +
+          (data.room_bots && data.room_bots.length ? ' · Salas: ' + data.room_bots.filter(function(b){ return b.transcript_ready; }).length + '/' + data.room_bots.length : '');
+        if (data.status === 'done' && data.summary) {
+          $('verResumenSummary').textContent = data.summary;
+          $('verResumenSummary').style.display = 'block';
+        } else if (data.status === 'done' && data.error) {
+          $('verResumenSummary').textContent = 'Error: ' + data.error;
+          $('verResumenSummary').style.display = 'block';
+        } else {
+          $('verResumenSummary').style.display = 'none';
+        }
+      } catch (e) {
+        msg('verResumenMsg', 'Error: ' + e.message, 'error');
+      }
+    }
+    $('btnVerResumen').onclick = verResumen;
+    // Cargar ID y URLs guardadas al abrir la página
+    try {
+      var savedIds = getSavedIds();
+      if (savedIds.length > 0) {
+        $('meetingIdResumen').value = savedIds[0];
+      } else {
+        var legacyId = localStorage.getItem('zoom1_meeting_id');
+        if (legacyId) {
+          $('meetingIdResumen').value = legacyId;
+          addIdToHistory(legacyId);
+        }
+      }
+      var savedUrls = getSavedUrls();
+      if (savedUrls.length > 0) $('meetingUrlIniciar').value = savedUrls[0];
+    } catch (e) {}
   </script>
 </body>
 </html>

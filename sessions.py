@@ -4,13 +4,27 @@ Cuando todos terminan, se genera el resumen automáticamente.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 # En memoria (para producción usar Redis/DB)
 _sessions: dict[str, "Session"] = {}
 _bot_to_session: dict[str, str] = {}  # bot_id -> session_id
+
+
+def _extract_meeting_id(meeting_url: str | dict | None) -> str | None:
+    """Extrae el ID numérico de la reunión de una URL de Zoom."""
+    if not meeting_url:
+        return None
+    if isinstance(meeting_url, dict):
+        meeting_url = meeting_url.get("url") or meeting_url.get("meeting_url") or ""
+    if not isinstance(meeting_url, str):
+        return None
+    m = re.search(r"zoom\.us/j/(\d+)", meeting_url)
+    return m.group(1) if m else None
 
 
 @dataclass
@@ -25,12 +39,14 @@ class RoomBot:
 class Session:
     session_id: str
     meeting_url: str
+    meeting_id: str | None  # ID numérico de Zoom para buscar por reunión
     main_bot_id: str
     main_transcript: str | None = None
     room_bots: list[RoomBot] = field(default_factory=list)
     status: str = "recording"  # recording | processing | done
     summary: str | None = None
     error: str | None = None
+    created_at: datetime = field(default_factory=datetime.utcnow)
 
     def all_bots_done(self) -> bool:
         if self.main_transcript is None:
@@ -38,9 +54,20 @@ class Session:
         return all(r.transcript is not None for r in self.room_bots)
 
 
-def create_session(meeting_url: str, main_bot_id: str) -> Session:
+def create_session(meeting_url: str | dict, main_bot_id: str) -> Session:
     sid = str(uuid.uuid4())
-    s = Session(session_id=sid, meeting_url=meeting_url, main_bot_id=main_bot_id)
+    if isinstance(meeting_url, str):
+        url_str = meeting_url
+    else:
+        url_str = (meeting_url.get("url") or meeting_url.get("meeting_url")) if isinstance(meeting_url, dict) else ""
+        url_str = url_str if isinstance(url_str, str) else ""
+    meeting_id = _extract_meeting_id(url_str)
+    s = Session(
+        session_id=sid,
+        meeting_url=url_str,
+        meeting_id=meeting_id,
+        main_bot_id=main_bot_id,
+    )
     _sessions[sid] = s
     _bot_to_session[main_bot_id] = sid
     return s
@@ -48,6 +75,20 @@ def create_session(meeting_url: str, main_bot_id: str) -> Session:
 
 def get_session(session_id: str) -> Session | None:
     return _sessions.get(session_id)
+
+
+def get_latest_session_by_meeting_id(meeting_id: str) -> Session | None:
+    """Devuelve la sesión más reciente para este ID de reunión Zoom (la última vez que iniciaron bots)."""
+    if not meeting_id:
+        return None
+    # normalizar: solo dígitos
+    mid = re.sub(r"\D", "", str(meeting_id))
+    if not mid:
+        return None
+    candidates = [s for s in _sessions.values() if s.meeting_id == mid]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda s: s.created_at)
 
 
 def get_session_by_bot_id(bot_id: str) -> Session | None:

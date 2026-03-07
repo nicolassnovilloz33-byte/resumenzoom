@@ -34,6 +34,20 @@ En este modo **no hace falta** que nadie pegue transcripciones ni tome notas. El
 - `RECALL_API_KEY`: tu API key de Recall.ai.
 - `RECALL_REGION`: región del dashboard (ej. `us-east-1`, `eu-central-1`).
 
+### Modo automático con asignación manual (ideal para ISPs)
+
+Si **no podés** usar "Dejar que los participantes elijan sala" (por ejemplo porque cada ISP no puede entrar a la sala de otro), usá **asignación manual**:
+
+1. Al iniciar la reunión, hacé `POST /reuniones/iniciar` con la URL de Zoom **y** el número de salas:
+   ```json
+   { "meeting_url": "https://zoom.us/j/...", "num_breakout_rooms": 4 }
+   ```
+2. La app crea **1 bot para la sala principal** + **4 bots** (ResumenZoom-Sala1, ResumenZoom-Sala2, etc.) que se unen a la reunión.
+3. Cuando abras los breakouts en Zoom, **asigná vos** cada participante: arrastrá "ResumenZoom-Sala1" a la Sala 1, "ResumenZoom-Sala2" a la Sala 2, etc. Los participantes **no eligen** sala; solo vos los asignás.
+4. Al terminar la reunión, el resumen se genera igual. Consultalo con `GET /reuniones/{session_id}`.
+
+Así ningún ISP puede "espiar" la sala de otro: el host controla quién va a cada sala.
+
 ---
 
 ## Modo manual (Zoom + texto por sala)

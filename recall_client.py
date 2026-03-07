@@ -10,7 +10,7 @@ RECALL_BASE = f"https://{RECALL_REGION}.recall.ai/api/v1"
 
 def _headers():
     if not RECALL_API_KEY:
-        raise ValueError("Falta RECALL_API_KEY en .env")
+        raise ValueError("Falta RECALL_API_KEY en z.env")
     return {"Authorization": f"Token {RECALL_API_KEY}", "Content-Type": "application/json"}
 
 
@@ -46,6 +46,30 @@ def create_bot_breakout_room(
         "meeting_url": meeting_url,
         "bot_name": f"ResumenZoom-{room_name or room_id[:8]}",
         "breakout_room": {"mode": "join_specific_room", "room_id": room_id},
+        "recording_config": {
+            "transcript": {"provider": {"meeting_captions": {}}},
+        },
+    }
+    if metadata:
+        body["metadata"] = metadata
+    with httpx.Client(timeout=30) as client:
+        r = client.post(f"{RECALL_BASE}/bot", headers=_headers(), json=body)
+        r.raise_for_status()
+        return r.json()
+
+
+def create_bot_auto_accept(
+    meeting_url: str, bot_name: str, metadata: dict | None = None
+) -> dict:
+    """
+    Crea un bot que acepta cuando el host lo asigna a una sala.
+    Para uso con "asignación manual": creás N bots, el host los asigna a cada sala.
+    Así ningún participante elige sala (ideal para confidencialidad entre ISPs).
+    """
+    body = {
+        "meeting_url": meeting_url,
+        "bot_name": bot_name,
+        "breakout_room": {"mode": "auto_accept_all_invites"},
         "recording_config": {
             "transcript": {"provider": {"meeting_captions": {}}},
         },
