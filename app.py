@@ -21,6 +21,7 @@ from recall_client import (
     create_bot_auto_accept,
     get_bot,
     get_transcript_text,
+    leave_bot,
 )
 from sessions import (
     create_session,
@@ -239,6 +240,41 @@ def resumen_parcial(body: ResumenParcialBody):
         return {"summary": resumen}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error al generar resumen: {str(e)}")
+
+
+@app.post("/reuniones/sacar-bots")
+def sacar_bots(body: ResumenParcialBody):
+    """
+    Saca de la reunión a todos los bots de la sesión (sala principal + salas de trabajo).
+    Usá el ID de la reunión Zoom de la última vez que enviaste bots.
+    """
+    import re
+    mid = re.sub(r"\D", "", str(body.meeting_id or ""))
+    if not mid:
+        raise HTTPException(status_code=400, detail="ID de reunión inválido.")
+    session = get_latest_session_by_meeting_id(mid)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="No hay sesión para este ID. Iniciá una reunión con bots primero.",
+        )
+    bot_ids = [session.main_bot_id] + [r.bot_id for r in session.room_bots]
+    left = 0
+    failed = 0
+    for bid in bot_ids:
+        try:
+            if leave_bot(bid):
+                left += 1
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+    return {
+        "message": f"Se envió la orden de salir a {len(bot_ids)} bot(s). Salieron: {left}. Fallos: {failed}.",
+        "left": left,
+        "failed": failed,
+        "total": len(bot_ids),
+    }
 
 
 def _session_response(session):

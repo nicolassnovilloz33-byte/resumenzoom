@@ -102,6 +102,19 @@ def get_bot(bot_id: str) -> dict:
         return r.json()
 
 
+def leave_bot(bot_id: str) -> bool:
+    """Saca al bot de la reunión (leave call). Irreversible."""
+    with httpx.Client(timeout=15) as client:
+        r = client.post(f"{RECALL_BASE}/bot/{bot_id}/leave", headers=_headers())
+        if r.status_code in (200, 204):
+            return True
+        try:
+            r.raise_for_status()
+        except Exception:
+            pass
+        return False
+
+
 def get_transcript_text(bot_id: str) -> str | None:
     """
     Descarga la transcripción del bot (cuando status es 'done') y la devuelve como texto.

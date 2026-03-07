@@ -229,6 +229,7 @@
       <div class="inline mb">
         <button type="button" id="btnVerResumen">Ver resumen</button>
         <button type="button" id="btnVerResumenParcial" class="btn-ghost" style="margin-left:0.5rem;">Ver resumen parcial (en vivo)</button>
+        <button type="button" id="btnSacarBots" class="btn-ghost" style="margin-left:0.5rem;">Sacar todos los bots</button>
       </div>
       <p id="verResumenMsg" class="msg"></p>
       <div id="verResumenEstado" class="resumen-output" style="display:none; margin-top:0.5rem;"></div>
@@ -544,6 +545,39 @@
       }
     }
     $('btnVerResumenParcial').onclick = verResumenParcial;
+
+    async function sacarBots () {
+      var meetingIdInput = $('meetingIdResumen');
+      var mid = meetingIdInput.value.trim().replace(/\D/g, '');
+      if (!mid) {
+        msg('verResumenMsg', 'Escribí el ID de tu reunión Zoom (solo números).', 'error');
+        return;
+      }
+      msg('verResumenMsg', 'Sacando bots de la reunión...');
+      try {
+        var r = await fetch(API + '/reuniones/sacar-bots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+          body: JSON.stringify({ meeting_id: mid })
+        });
+        var text = await r.text();
+        var data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          msg('verResumenMsg', 'El servidor no respondió correctamente.', 'error');
+          return;
+        }
+        if (!r.ok) {
+          msg('verResumenMsg', data.detail || 'Error al sacar los bots.', 'error');
+          return;
+        }
+        msg('verResumenMsg', data.message || 'Listo.', 'success');
+      } catch (e) {
+        msg('verResumenMsg', 'Error: ' + e.message, 'error');
+      }
+    }
+    $('btnSacarBots').onclick = sacarBots;
 
     // Cargar ID y URLs guardadas al abrir la página
     try {
