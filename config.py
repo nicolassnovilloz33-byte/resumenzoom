@@ -27,3 +27,9 @@ RECALL_REGION = (os.getenv("RECALL_REGION") or "us-west-2").strip()
 RECALL_WEBHOOK_SECRET = (os.getenv("RECALL_WEBHOOK_SECRET") or "").strip()
 # URL pública de la app (Railway o ngrok) para webhooks de transcripción en tiempo real
 BASE_PUBLIC_URL = (os.getenv("BASE_PUBLIC_URL") or "").strip()
+
+# PostgreSQL para persistir sesiones (sobreviven al redeploy). Si está vacío, se usa memoria.
+# Railway puede exponer DATABASE_URL o DATABASE_PUBLIC_URL.
+DATABASE_URL = (
+    (os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL") or "").strip()
+)
