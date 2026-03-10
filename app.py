@@ -75,6 +75,13 @@ class ResumenParcialBody(BaseModel):
 # --- App ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from config import DATABASE_URL
+    if DATABASE_URL:
+        try:
+            from db import init_schema
+            init_schema()
+        except Exception:
+            pass  # Si falla (ej. no hay Postgres), la app sigue con sesiones en memoria
     yield
     # cleanup si hiciera falta
 

@@ -70,6 +70,7 @@ Así la app corre 24/7 en la nube y no necesitás tener la compu prendida. Cuand
    | `RECALL_API_KEY`  | tu clave de Recall.ai              |
    | `RECALL_REGION`   | `us-west-2`                        |
 | `OPENAI_API_KEY`  | tu clave de OpenAI                 |
+| **`DATABASE_URL`** | **(automática si agregás Postgres)** Ver paso 5b. Sin ella las sesiones se pierden al redesplegar; con Postgres "Ver resumen" y "Sacar todos los bots" siguen funcionando. |
 | `ZOOM_ACCOUNT_ID` | (opcional, si usás Zoom)           |
 | `ZOOM_CLIENT_ID`  | (opcional)                         |
 | `ZOOM_CLIENT_SECRET` | (opcional)                      |
@@ -78,6 +79,18 @@ Así la app corre 24/7 en la nube y no necesitás tener la compu prendida. Cuand
    No subas `z.env` a GitHub; copiá solo los valores y pegálos en Railway.
 
 4. Guardá. Railway va a redesplegar solo con los nuevos valores.
+
+---
+
+## Paso 5b: (Recomendado) Agregar PostgreSQL para que las sesiones no se pierdan
+
+Si no configurás base de datos, cada vez que Railway redespliegue (o reinicie el servidor) se pierden las sesiones en memoria y "Ver resumen" / "Sacar todos los bots" pueden decir que no hay reunión iniciada. Para evitarlo:
+
+1. En tu proyecto de Railway, clic en **+ New** (o "Add Service").
+2. Elegí **Database** → **PostgreSQL**.
+3. Railway crea la base y te asigna la variable **`DATABASE_URL`** automáticamente en el servicio de tu app (a veces hay que vincularla: en el servicio de la app, Variables, y debería aparecer `DATABASE_URL` referenciada desde el add-on de Postgres).
+4. Si no aparece sola: en el servicio de **tu app**, Variables → **Add Variable** → **Add a reference** (o "Variable reference") y elegí la variable `DATABASE_URL` del servicio PostgreSQL.
+5. Guardá. Railway redespliega y la app creará las tablas al arrancar. A partir de ahí las sesiones se guardan en Postgres y sobreviven a redeploys.
 
 ---
 
@@ -138,6 +151,7 @@ Así la app corre 24/7 en la nube y no necesitás tener la compu prendida. Cuand
 | 1–2 | Proyecto en GitHub (sin subir `z.env`) |
 | 3–4 | Cuenta Railway y proyecto desde GitHub |
 | 5   | Variables de entorno en Railway (claves de Recall, OpenAI, etc.) |
+| 5b  | (Recomendado) Agregar PostgreSQL para persistir sesiones entre redeploys |
 | 6   | Comando de inicio (Procfile o Start Command) |
 | 7   | URL pública de Railway |
 | 8   | Esa URL + `/webhooks/recall` en Recall.ai |

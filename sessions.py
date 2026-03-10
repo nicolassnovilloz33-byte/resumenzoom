@@ -1,6 +1,7 @@
 """
 Estado de sesiones de reunión: un bot en sala principal + N bots en breakout rooms.
 Cuando todos terminan, se genera el resumen automáticamente.
+Persistencia: si DATABASE_URL está definida se usa PostgreSQL; si no, solo memoria.
 """
 from __future__ import annotations
 
@@ -10,9 +11,41 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-# En memoria (para producción usar Redis/DB)
+# En memoria (cuando DATABASE_URL no está definida)
 _sessions: dict[str, "Session"] = {}
 _bot_to_session: dict[str, str] = {}  # bot_id -> session_id
+
+
+def _use_db() -> bool:
+    from config import DATABASE_URL
+    return bool(DATABASE_URL and DATABASE_URL.strip())
+
+
+def _dict_to_session(d: dict[str, Any]) -> "Session":
+    """Construye Session (y RoomBots) desde el dict que devuelve db.py."""
+    room_bots = [
+        RoomBot(
+            bot_id=r["bot_id"],
+            room_id=r["room_id"],
+            room_name=r["room_name"],
+            transcript=r.get("transcript"),
+            realtime_transcript=r.get("realtime_transcript") or "",
+        )
+        for r in (d.get("room_bots") or [])
+    ]
+    return Session(
+        session_id=d["session_id"],
+        meeting_url=d["meeting_url"],
+        meeting_id=d["meeting_id"],
+        main_bot_id=d["main_bot_id"],
+        main_transcript=d.get("main_transcript"),
+        main_realtime_transcript=d.get("main_realtime_transcript") or "",
+        room_bots=room_bots,
+        status=d.get("status") or "recording",
+        summary=d.get("summary"),
+        error=d.get("error"),
+        created_at=d.get("created_at") or datetime.utcnow(),
+    )
 
 
 def _extract_meeting_id(meeting_url: str | dict | None) -> str | None:
@@ -57,6 +90,10 @@ class Session:
 
 
 def create_session(meeting_url: str | dict, main_bot_id: str) -> Session:
+    if _use_db():
+        import db
+        d = db.create_session(meeting_url, main_bot_id)
+        return _dict_to_session(d)
     sid = str(uuid.uuid4())
     if isinstance(meeting_url, str):
         url_str = meeting_url
@@ -76,11 +113,19 @@ def create_session(meeting_url: str | dict, main_bot_id: str) -> Session:
 
 
 def get_session(session_id: str) -> Session | None:
+    if _use_db():
+        import db
+        d = db.get_session(session_id)
+        return _dict_to_session(d) if d else None
     return _sessions.get(session_id)
 
 
 def get_latest_session_by_meeting_id(meeting_id: str) -> Session | None:
     """Devuelve la sesión más reciente para este ID de reunión Zoom (la última vez que iniciaron bots)."""
+    if _use_db():
+        import db
+        d = db.get_latest_session_by_meeting_id(meeting_id)
+        return _dict_to_session(d) if d else None
     if not meeting_id:
         return None
     # normalizar: solo dígitos
@@ -94,11 +139,19 @@ def get_latest_session_by_meeting_id(meeting_id: str) -> Session | None:
 
 
 def get_session_by_bot_id(bot_id: str) -> Session | None:
+    if _use_db():
+        import db
+        d = db.get_session_by_bot_id(bot_id)
+        return _dict_to_session(d) if d else None
     sid = _bot_to_session.get(bot_id)
     return _sessions.get(sid) if sid else None
 
 
 def register_room_bot(session_id: str, bot_id: str, room_id: str, room_name: str) -> None:
+    if _use_db():
+        import db
+        db.register_room_bot(session_id, bot_id, room_id, room_name)
+        return
     s = _sessions.get(session_id)
     if not s:
         return
@@ -107,12 +160,20 @@ def register_room_bot(session_id: str, bot_id: str, room_id: str, room_name: str
 
 
 def set_main_transcript(session_id: str, text: str | None) -> None:
+    if _use_db():
+        import db
+        db.set_main_transcript(session_id, text)
+        return
     s = _sessions.get(session_id)
     if s:
         s.main_transcript = text or ""
 
 
 def set_room_transcript(session_id: str, bot_id: str, text: str | None) -> None:
+    if _use_db():
+        import db
+        db.set_room_transcript(session_id, bot_id, text)
+        return
     s = _sessions.get(session_id)
     if not s:
         return
@@ -124,6 +185,10 @@ def set_room_transcript(session_id: str, bot_id: str, text: str | None) -> None:
 
 def append_realtime_transcript(bot_id: str, text: str) -> None:
     """Acumula texto de transcripción en tiempo real (evento transcript.data)."""
+    if _use_db():
+        import db
+        db.append_realtime_transcript(bot_id, text)
+        return
     if not text or not text.strip():
         return
     s = get_session_by_bot_id(bot_id)
@@ -140,12 +205,20 @@ def append_realtime_transcript(bot_id: str, text: str) -> None:
 
 
 def mark_processing(session_id: str) -> None:
+    if _use_db():
+        import db
+        db.mark_processing(session_id)
+        return
     s = _sessions.get(session_id)
     if s:
         s.status = "processing"
 
 
 def mark_done(session_id: str, summary: str | None = None, error: str | None = None) -> None:
+    if _use_db():
+        import db
+        db.mark_done(session_id, summary=summary, error=error)
+        return
     s = _sessions.get(session_id)
     if s:
         s.status = "done"
