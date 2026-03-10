@@ -145,7 +145,8 @@ def reuniones_iniciar(body: IniciarReunionBody):
             meeting_url_from_bot = meeting_url
         if not bot_id:
             raise HTTPException(status_code=502, detail="Recall no devolvió ID del bot")
-        session = create_session(meeting_url_from_bot, bot_id)
+        # Usar la URL del usuario para crear la sesión así el meeting_id se extrae bien (Recall puede devolver otro formato)
+        session = create_session(meeting_url, bot_id)
 
         room_bot_ids = []
         if body.num_breakout_rooms and body.num_breakout_rooms > 0:
